@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="es" data-bs-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Jackettio</title>
+    <link rel="icon" href="/icon">
+    <link href="/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <style>
+      .container {
+        max-width: 600px;
+      }
+      [v-cloak] { display: none; }
+    </style>
+  </head>
+  <body id="app">
+    <div class="container my-5" v-cloak>
+      <h1 class="mb-4">{{addon.name}} <span style="font-size:.6em">v{{addon.version}}</span></h1>
+      <form class="shadow p-3 bg-dark-subtle z-3 rounded">
+
+        <!-- welcome-message -->
+
+        <h5 class="mt-4">Indexadores</h5>
+        <div class="ps-2 border-start border-secondary-subtle">
+          <div class="mb-3 alert alert-warning" v-if="indexers.length == 0">
+            No hay indexadores disponibles, la instancia de Jackett no parece estar configurada correctamente.
+          </div>
+          <div class="mb-3" v-if="indexers.length >= 1 && !immulatableUserConfigKeys.includes('indexers')">
+            <label>Indexadores habilitados:</label>
+            <div class="d-flex flex-wrap">
+              <div v-for="indexer in indexers" class="me-3" :title="indexer.types.join(', ')">
+                <input class="form-check-input me-1" type="checkbox" v-model="indexer.checked" :id="indexer.label">
+                <label class="form-check-label" :for="indexer.label">{{indexer.label}}</label>
+              </div>
+            </div>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('indexerTimeoutSec')">
+            <label>Tiempo de espera del indexador</label>
+            <input type="number" v-model="form.indexerTimeoutSec" min="6" max="120" class="form-control">
+            <small class="text-muted">Tiempo máximo de ejecución en segundos antes del timeout.</small>
+          </div>
+          <div class="mb-3" v-if="passkey && passkey.enabled">
+            <label>Passkey del indexador privado <i>(Recomendado)</i></label>
+            <small v-if="passkey.infoUrl" class="ms-2"><a :href="passkey.infoUrl" target="_blank" rel="noreferrer">Obtener aquí</a></small>
+            <input type="text" v-model="form.passkey" class="form-control" :pattern="passkey.pattern">
+            <small class="text-muted">Con el Passkey puedes transmitir torrents en caché y sin caché, sin el Passkey solo puedes transmitir torrents en caché.</small>
+          </div>
+        </div>
+
+        <h5 class="mt-4">Filtros y Ordenamiento</h5>
+        <div class="ps-2 border-start border-secondary-subtle">
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('qualities')">
+            <label>Calidades:</label>
+            <div class="d-flex flex-wrap">
+              <div v-for="quality in qualities" class="me-3">
+                <input class="form-check-input me-1" type="checkbox" v-model="quality.checked" :id="quality.label">
+                <label class="form-check-label" :for="quality.label">{{quality.label}}</label>
+              </div>
+            </div>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('excludeKeywords')">
+            <label>Excluir palabras clave en el nombre del torrent</label>
+            <input type="text" v-model="form.excludeKeywords" placeholder="palabra1,palabra2" class="form-control">
+            <small class="text-muted">Ejemplo: cam,xvid</small>
+          </div>
+          <div class="mb-3 d-flex flex-row" v-if="!immulatableUserConfigKeys.includes('hideUncached')">
+            <div class="form-check form-switch">
+              <input class="form-check-input me-1" type="checkbox" v-model="form.hideUncached" id="hideUncached">
+              <label for="hideUncached" class="d-flex flex-column">
+                <span>Mostrar solo torrents en caché</span>
+              </label>
+            </div>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('sortCached')">
+            <label>Ordenamiento de torrents en caché</label>
+            <select v-model="form.sortCached" class="form-select">
+              <option v-for="sort in sorts" :value="sort.value">{{sort.label}}</option>
+            </select>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('sortUncached') && !form.hideUncached">
+            <label>Ordenamiento de torrents sin caché</label>
+            <select v-model="form.sortUncached" class="form-select">
+              <option v-for="sort in sorts" :value="sort.value">{{sort.label}}</option>
+            </select>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('maxTorrents')">
+            <label>Máximo de torrents en búsqueda</label>
+            <input type="number" v-model="form.maxTorrents" min="1" max="30" class="form-control">
+            <small class="text-muted">Un número alto puede ralentizar significativamente la solicitud</small>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('priotizePackTorrents')">
+            <label>Forzar inclusión de <small>n</small> packs de series en búsqueda</label>
+            <input type="number" v-model="form.priotizePackTorrents" min="1" max="30" class="form-control">
+            <small class="text-muted">Esto podría aumentar la probabilidad de torrents en caché. 2 es un buen número</small>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('priotizeLanguages')">
+            <label>Priorizar idiomas de audio</label>
+            <select v-model="form.priotizeLanguages" class="form-select" multiple>
+              <option v-for="language in languages" :value="language.value">{{language.label}}</option>
+            </select>
+          </div>
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('metaLanguage') && metaLanguages.length > 0">
+            <label>Idiomas de búsqueda</label>
+            <select v-model="form.metaLanguage" class="form-select">
+              <option v-for="metaLanguage in metaLanguages" :value="metaLanguage.value">{{metaLanguage.label}}</option>
+            </select>
+            <small class="text-muted">Por defecto, la búsqueda usa el título original y funciona en la mayoría de casos, pero puedes forzar la búsqueda a usar un idioma específico.</small>
+          </div>
+        </div>
+
+        <h5 class="mt-4">Proveedor de Streaming</h5>
+        <div class="ps-2 border-start border-secondary-subtle">
+          <div class="mb-3 d-flex flex-row" v-if="!immulatableUserConfigKeys.includes('forceCacheNextEpisode')">
+            <div class="form-check form-switch">
+              <input class="form-check-input me-1" type="checkbox" v-model="form.forceCacheNextEpisode" id="forceCacheNextEpisode">
+              <label for="forceCacheNextEpisode" class="d-flex flex-column">
+                <span>Preparar el siguiente episodio. (Recomendado)</span>
+                <small class="text-muted">Añade automáticamente el siguiente episodio cuando no esté disponible para transmitirlo instantáneamente después.</small>
+              </label>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label>Proveedor de streaming:</label>
+            <select v-model="debrid" class="form-select" @change="form.debridId = debrid.id">
+              <option v-for="option in debrids" :value="option">{{ option.name }}</option>
+            </select>
+          </div>
+          <div v-for="field in debrid.configFields" class="mb-3">
+            <label>{{field.label}}:</label> 
+            <small v-if="field.href" class="ms-2"><a :href="field.href.value" target="_blank" rel="noreferrer">{{field.href.label}}</a></small>
+            <input type="{{field.type}}" v-model="field.value" class="form-control">
+          </div>
+        </div>
+
+        <h5 class="mt-4">MediaFlow Proxy</h5>
+        <div class="ps-2 border-start border-secondary-subtle">
+          <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('enableMediaFlow')">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" v-model="form.enableMediaFlow" id="enableMediaFlow">
+              <label class="form-check-label" for="enableMediaFlow">Habilitar MediaFlow Proxy</label>
+            </div>
+          </div>
+          <div v-if="form.enableMediaFlow">
+            <div class="mb-2">
+              <a href="https://github.com/mhdzumair/mediaflow-proxy?tab=readme-ov-file#mediaflow-proxy" target="_blank" rel="noopener">
+                Guía de configuración de MediaFlow
+              </a>
+            </div>
+            <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('mediaflowProxyUrl')">
+              <label for="mediaflowProxyUrl">URL de MediaFlow Proxy:</label>
+              <input type="text" v-model="form.mediaflowProxyUrl" class="form-control" id="mediaflowProxyUrl" placeholder="https://tu-mediaflow-proxy-url.com">
+            </div>
+            <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('mediaflowApiPassword')">
+              <label for="mediaflowApiPassword">Contraseña API de MediaFlow:</label>
+              <div class="input-group">
+                <input :type="showMediaFlowPassword ? 'text' : 'password'" v-model="form.mediaflowApiPassword" class="form-control" id="mediaflowApiPassword">
+                <button class="btn btn-outline-secondary" type="button" @click="toggleMediaFlowPassword">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16" v-if="showMediaFlowPassword">
+                    <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
+                    <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
+                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-eye-slash-fill" viewBox="0 0 16 16" v-else>
+                    <path d="m10.79 12.912-1.614-1.615a3.5 3.5 0 0 1-4.474-4.474l-2.06-2.06C.938 6.278 0 8 0 8s3 5.5 8 5.5a7 7 0 0 0 2.79-.588M5.21 3.088A7 7 0 0 1 8 2.5c5 0 8 5.5 8 5.5s-.939 1.721-2.641 3.238l-2.062-2.062a3.5 3.5 0 0 0-4.474-4.474z"/>
+                    <path d="M5.525 7.646a2.5 2.5 0 0 0 2.829 2.829zm4.95.708-2.829-2.83a2.5 2.5 0 0 1 2.829 2.829zm3.171 6-12-12 .708-.708 12 12z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="mb-3" v-if="!immulatableUserConfigKeys.includes('mediaflowPublicIp')">
+              <label for="mediaflowPublicIp">IP Pública de MediaFlow (Opcional):</label>
+              <input type="text" v-model="form.mediaflowPublicIp" class="form-control" id="mediaflowPublicIp" placeholder="Ingresa la dirección IP pública">
+              <small class="text-muted">
+                Configura esto solo cuando ejecutes MediaFlow localmente con un servicio proxy. Déjalo vacío si MediaFlow está configurado localmente sin servidor proxy o si está alojado en un servidor remoto.
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <div class="my-3">
+          <button @click="configure" type="button" class="btn btn-primary" :disabled="!debrid.id">{{isUpdate ? 'Actualizar' : 'Generar Configuración'}}</button>
+          <div v-if="error" class="text-danger mt-2">{{error}}</div>
+          
+          <div v-if="manifestUrl" class="mt-3 p-3 border border-success rounded">
+            <h6 class="text-success">✓ Configuración generada exitosamente</h6>
+            <div class="d-flex flex-column gap-2 mt-2">
+              <a :href="manifestUrl" class="btn btn-success">
+                🚀 Instalar en Stremio (Clic Directo)
+              </a>
+              <div class="input-group">
+                <input type="text" :value="httpManifestUrl" class="form-control" readonly id="addonUrl">
+                <button class="btn btn-outline-secondary" type="button" @click="copyUrl">
+                  {{copied ? '✓ Copiado' : '📋 Copiar URL'}}
+                </button>
+              </div>
+              <small class="text-muted">
+                Puedes instalar directamente con el botón verde o copiar la URL para instalarla manualmente en Stremio.
+              </small>
+            </div>
+          </div>
+        </div>
+
+      </form>
+    </div>
+
+    <script src="/js/vue.global.prod.js"></script>
+    <script type="text/javascript">/** import-config */</script>
+    <script type="text/javascript">
+      const { createApp, ref } = Vue
+      createApp({
+        setup() {
+
+          const {addon, debrids, defaultUserConfig, qualities, languages, sorts, indexers, passkey, immulatableUserConfigKeys, metaLanguages} = config;
+
+          const debrid = ref({});
+          const error = ref('');
+          const manifestUrl = ref('');
+          const httpManifestUrl = ref('');
+          const copied = ref(false);
+          let isUpdate = false;
+          const showMediaFlowPassword = ref(false);
+
+          function toggleMediaFlowPassword() {
+            showMediaFlowPassword.value = !showMediaFlowPassword.value;
+          }
+
+          function copyUrl() {
+            const urlInput = document.getElementById('addonUrl');
+            urlInput.select();
+            document.execCommand('copy');
+            copied.value = true;
+            setTimeout(() => {
+              copied.value = false;
+            }, 2000);
+          }
+
+          if(config.userConfig){
+            try {
+              const savedUserConfig = JSON.parse(atob(config.userConfig));
+              Object.assign(defaultUserConfig, savedUserConfig);
+              debrid.value = debrids.find(debrid => debrid.id == savedUserConfig.debridId) || {};
+              debrid.value.configFields.forEach(field => field.value = savedUserConfig[field.name] || null);
+              isUpdate = true;
+            }catch(err){}
+          }
+
+          const form = ref({
+            maxTorrents: defaultUserConfig.maxTorrents,
+            priotizePackTorrents: defaultUserConfig.priotizePackTorrents,
+            excludeKeywords: defaultUserConfig.excludeKeywords.join(','),
+            debridId: defaultUserConfig.debridId || '',
+            hideUncached: defaultUserConfig.hideUncached,
+            sortCached: defaultUserConfig.sortCached,
+            sortUncached: defaultUserConfig.sortUncached,
+            forceCacheNextEpisode: defaultUserConfig.forceCacheNextEpisode,
+            priotizeLanguages: defaultUserConfig.priotizeLanguages,
+            indexerTimeoutSec: defaultUserConfig.indexerTimeoutSec,
+            metaLanguage: defaultUserConfig.metaLanguage,
+            enableMediaFlow: defaultUserConfig.enableMediaFlow,
+            mediaflowProxyUrl: defaultUserConfig.mediaflowProxyUrl,
+            mediaflowApiPassword: defaultUserConfig.mediaflowApiPassword,
+            mediaflowPublicIp: defaultUserConfig.mediaflowPublicIp
+          });
+
+          qualities.forEach(quality => quality.checked = defaultUserConfig.qualities.includes(quality.value));
+          indexers.forEach(indexer => indexer.checked = defaultUserConfig.indexers.includes(indexer.value) || defaultUserConfig.indexers.includes('all'));
+
+          async function configure(){
+            try {
+              error.value = '';
+              const userConfig = Object.assign({}, form.value);
+              userConfig.qualities = qualities.filter(quality => quality.checked).map(quality => quality.value);
+              userConfig.indexers = indexers.filter(indexer => indexer.checked).map(indexer => indexer.value);
+              userConfig.excludeKeywords = form.value.excludeKeywords.split(',').filter(Boolean);
+              debrid.value.configFields.forEach(field => {
+                if(field.required && !field.value)throw new Error(`${field.label} is required`);
+                userConfig[field.name] = field.value
+              });
+
+              if(!userConfig.debridId){
+                throw new Error(`El proveedor de streaming es obligatorio`);
+              }
+
+              if(!userConfig.qualities.length){
+                throw new Error(`La calidad es obligatoria`);
+              }
+
+              if(!userConfig.indexers.length && indexers.length){
+                throw new Error(`El indexador es obligatorio`);
+              }
+
+              if(passkey.enabled){
+                if(userConfig.passkey && !userConfig.passkey.match(new RegExp(passkey.pattern))){
+                  throw new Error(`El passkey del tracker tiene un formato inválido: ${passkey.pattern}`);
+                }
+              }
+
+              // MediaFlow config validation
+              if (userConfig.enableMediaFlow) {
+                if (!userConfig.mediaflowProxyUrl) {
+                  throw new Error('La URL de MediaFlow Proxy es obligatoria cuando MediaFlow está habilitado');
+                }
+                if (!userConfig.mediaflowApiPassword) {
+                  throw new Error('La contraseña API de MediaFlow es obligatoria cuando MediaFlow está habilitado');
+                }
+              }
+
+              const configBase64 = btoa(JSON.stringify(userConfig));
+              manifestUrl.value = `stremio://${document.location.host}/${configBase64}/manifest.json`;
+              httpManifestUrl.value = `${document.location.protocol}//${document.location.host}/${configBase64}/manifest.json`;
+            }catch(err){
+              error.value = err.message || err;
+            }
+          }
+
+          return {
+            addon,
+            debrids,
+            debrid,
+            qualities,
+            sorts,
+            form,
+            configure,
+            error,
+            manifestUrl,
+            httpManifestUrl,
+            indexers,
+            passkey,
+            immulatableUserConfigKeys,
+            languages,
+            isUpdate,
+            metaLanguages,
+            showMediaFlowPassword,
+            toggleMediaFlowPassword,
+            copied,
+            copyUrl
+          }
+        }
+      }).mount('#app')
+    </script>
+  </body>
+</html>
