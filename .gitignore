@@ -1,0 +1,31 @@
+# Dependency directory
+node_modules
+
+# Composes
+docker-compose-dev.yml
+
+# Ignore environment files
+.env
+.env.*
+
+# PM2 logs
+logs/
+*.log
+
+# Data folder
+jackettio-data/
+/tmp/
+
+# SSH keys
+*.pem
+*.ppk
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
